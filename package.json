@@ -1,0 +1,37 @@
+{
+  "name": "@hashd/bytecave-relay",
+  "version": "1.0.0",
+  "description": "ByteCave P2P Relay and Bootstrap Node",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@chainsafe/libp2p-gossipsub": "^14.1.0",
+    "@chainsafe/libp2p-noise": "^16.0.0",
+    "@chainsafe/libp2p-yamux": "^7.0.1",
+    "@libp2p/bootstrap": "^11.0.8",
+    "@libp2p/circuit-relay-v2": "^2.1.4",
+    "@libp2p/dcutr": "^2.0.8",
+    "@libp2p/identify": "^3.0.8",
+    "@libp2p/kad-dht": "^14.1.0",
+    "@libp2p/tcp": "^10.0.10",
+    "@libp2p/websockets": "^9.0.8",
+    "@multiformats/multiaddr": "^12.2.1",
+    "libp2p": "^2.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.2.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

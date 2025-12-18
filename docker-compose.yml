@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  relay1:
+    build: .
+    container_name: bytecave-relay-1
+    ports:
+      - "4001:4001"
+      - "4002:4002"
+    volumes:
+      - relay1-data:/data
+    environment:
+      - RELAY_LISTEN_ADDRESSES=/ip4/0.0.0.0/tcp/4001,/ip4/0.0.0.0/tcp/4002/ws
+      - RELAY_PRIVATE_KEY_PATH=/data/relay-key.json
+      - RELAY_MAX_CONNECTIONS=1000
+    restart: unless-stopped
+
+  relay2:
+    build: .
+    container_name: bytecave-relay-2
+    ports:
+      - "4003:4001"
+      - "4004:4002"
+    volumes:
+      - relay2-data:/data
+    environment:
+      - RELAY_LISTEN_ADDRESSES=/ip4/0.0.0.0/tcp/4001,/ip4/0.0.0.0/tcp/4002/ws
+      - RELAY_PRIVATE_KEY_PATH=/data/relay-key.json
+      - RELAY_MAX_CONNECTIONS=1000
+      # Connect to relay1 as bootstrap
+      - RELAY_BOOTSTRAP_PEERS=/dns4/relay1/tcp/4001
+    depends_on:
+      - relay1
+    restart: unless-stopped
+
+volumes:
+  relay1-data:
+  relay2-data:
