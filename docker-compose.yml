@@ -1,37 +1,71 @@
 version: '3.8'
 
+networks:
+  bytecave-relay-net:
+    driver: bridge
+
 services:
   relay1:
     build: .
     container_name: bytecave-relay-1
+    hostname: relay1
     ports:
       - "4001:4001"
       - "4002:4002"
+      - "9095:9090"  # Metrics port (9095 external to avoid conflict)
     volumes:
       - relay1-data:/data
     environment:
       - RELAY_LISTEN_ADDRESSES=/ip4/0.0.0.0/tcp/4001,/ip4/0.0.0.0/tcp/4002/ws
+      # For local testing, leave announce addresses empty (auto-detect)
+      # For production, set: RELAY_ANNOUNCE_ADDRESSES=/dns4/relayer.hashd.social/tcp/4001,/dns4/relayer.hashd.social/tcp/4002/ws
+      - RELAY_ANNOUNCE_ADDRESSES=
       - RELAY_PRIVATE_KEY_PATH=/data/relay-key.json
       - RELAY_MAX_CONNECTIONS=1000
+      - RELAY_INFO_PORT=9090
+    networks:
+      - bytecave-relay-net
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('net').connect(4001, 'localhost').on('connect', () => process.exit(0)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   relay2:
     build: .
     container_name: bytecave-relay-2
+    hostname: relay2
     ports:
       - "4003:4001"
       - "4004:4002"
+      - "9091:9090"  # Metrics port
     volumes:
       - relay2-data:/data
     environment:
       - RELAY_LISTEN_ADDRESSES=/ip4/0.0.0.0/tcp/4001,/ip4/0.0.0.0/tcp/4002/ws
+      # For local testing, leave announce addresses empty (auto-detect)
+      # For production, set: RELAY_ANNOUNCE_ADDRESSES=/dns4/relayer.hashd.social/tcp/4003,/dns4/relayer.hashd.social/tcp/4004/ws
+      - RELAY_ANNOUNCE_ADDRESSES=
       - RELAY_PRIVATE_KEY_PATH=/data/relay-key.json
       - RELAY_MAX_CONNECTIONS=1000
-      # Connect to relay1 as bootstrap
-      - RELAY_BOOTSTRAP_PEERS=/dns4/relay1/tcp/4001
+      - RELAY_INFO_PORT=9090
+      # Bootstrap from relay1 (will be populated after relay1 starts)
+      # Note: You need to get relay1's peer ID first, then update this
+      - RELAY_BOOTSTRAP_PEERS=
+    networks:
+      - bytecave-relay-net
     depends_on:
-      - relay1
+      relay1:
+        condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('net').connect(4001, 'localhost').on('connect', () => process.exit(0)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
 volumes:
   relay1-data:

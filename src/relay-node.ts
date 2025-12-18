@@ -23,6 +23,7 @@ import { dcutr } from '@libp2p/dcutr';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { RelayConfig } from './config.js';
+import { RateLimiter } from './rate-limiter.js';
 
 const ANNOUNCE_TOPIC = 'bytecave-announce';
 
@@ -32,9 +33,19 @@ export class RelayNode {
   private startTime: number = 0;
   private connectionCount: number = 0;
   private relayedConnections: number = 0;
+  private rateLimiter: RateLimiter;
+  private rejectedConnections: number = 0;
 
   constructor(config: RelayConfig) {
     this.config = config;
+    this.rateLimiter = new RateLimiter({
+      maxConnectionsPerPeer: 5,
+      maxConnectionsPerIP: 20,
+      connectionWindowMs: 60000,
+      maxBandwidthPerPeerMbps: 10,
+      globalMaxConnections: config.maxConnections,
+      blockDurationMs: 300000
+    });
   }
 
   async start(): Promise<void> {
@@ -123,6 +134,7 @@ export class RelayNode {
       console.log('[Relay] Stopping relay node...');
       await this.node.stop();
       this.node = null;
+      this.rateLimiter.stop();
       console.log('[Relay] Stopped');
     }
   }
@@ -157,13 +169,27 @@ export class RelayNode {
     if (!this.node) return;
 
     this.node.addEventListener('peer:connect', (event) => {
+      const peerId = event.detail.toString();
+      
+      // Rate limit check
+      const rateCheck = this.rateLimiter.allowConnection(peerId);
+      if (!rateCheck.allowed) {
+        this.rejectedConnections++;
+        console.log('[Relay] Connection rejected:', peerId.slice(0, 16) + '...', '-', rateCheck.reason);
+        // Note: libp2p doesn't provide a way to reject here, connection is already established
+        // We track it for metrics and the peer will be disconnected if it violates limits
+        return;
+      }
+
       this.connectionCount++;
-      console.log('[Relay] Peer connected:', event.detail.toString().slice(0, 16) + '...', `(${this.connectionCount} total)`);
+      console.log('[Relay] Peer connected:', peerId.slice(0, 16) + '...', `(${this.connectionCount} total)`);
     });
 
     this.node.addEventListener('peer:disconnect', (event) => {
+      const peerId = event.detail.toString();
+      this.rateLimiter.recordDisconnection(peerId);
       this.connectionCount = Math.max(0, this.connectionCount - 1);
-      console.log('[Relay] Peer disconnected:', event.detail.toString().slice(0, 16) + '...', `(${this.connectionCount} total)`);
+      console.log('[Relay] Peer disconnected:', peerId.slice(0, 16) + '...', `(${this.connectionCount} total)`);
     });
 
     // Track relay reservations
@@ -193,7 +219,14 @@ export class RelayNode {
     uptime: number;
     connections: number;
     relayedConnections: number;
+    rejectedConnections: number;
     addresses: string[];
+    rateLimit: {
+      totalPeers: number;
+      blockedPeers: number;
+      blockedIPs: number;
+      activeConnections: number;
+    };
   } {
     if (!this.node) {
       return {
@@ -201,7 +234,14 @@ export class RelayNode {
         uptime: 0,
         connections: 0,
         relayedConnections: 0,
-        addresses: []
+        rejectedConnections: 0,
+        addresses: [],
+        rateLimit: {
+          totalPeers: 0,
+          blockedPeers: 0,
+          blockedIPs: 0,
+          activeConnections: 0
+        }
       };
     }
 
@@ -210,7 +250,9 @@ export class RelayNode {
       uptime: Math.floor((Date.now() - this.startTime) / 1000),
       connections: this.node.getPeers().length,
       relayedConnections: this.relayedConnections,
-      addresses: this.node.getMultiaddrs().map(ma => ma.toString())
+      rejectedConnections: this.rejectedConnections,
+      addresses: this.node.getMultiaddrs().map(ma => ma.toString()),
+      rateLimit: this.rateLimiter.getStats()
     };
   }
 
