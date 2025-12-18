@@ -63,7 +63,7 @@ export class RelayNode {
       dcutr: dcutr(),
       pubsub: gossipsub({
         emitSelf: false,
-        allowPublishToZeroTopicPeers: true
+        allowPublishToZeroTopicPeers: false
       })
     };
 
