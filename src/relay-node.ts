@@ -53,10 +53,6 @@ export class RelayNode {
 
     const services: any = {
       identify: identify(),
-      pubsub: gossipsub({
-        emitSelf: false,
-        allowPublishToZeroTopicPeers: true
-      }),
       relay: circuitRelayServer({
         reservations: {
           maxReservations: this.config.maxConnections,
@@ -64,7 +60,11 @@ export class RelayNode {
           defaultDataLimit: BigInt(1024 * 1024 * 10) // 10MB
         }
       }),
-      dcutr: dcutr()
+      dcutr: dcutr(),
+      pubsub: gossipsub({
+        emitSelf: false,
+        allowPublishToZeroTopicPeers: true
+      })
     };
 
     // Only enable DHT if explicitly enabled (defaults to true for production)
@@ -203,13 +203,18 @@ export class RelayNode {
     if (!this.node) return;
 
     const pubsub = this.node.services.pubsub as any;
-    if (!pubsub) return;
+    if (!pubsub) {
+      console.log('[Relay] WARNING: Pubsub service not available');
+      return;
+    }
 
+    console.log('[Relay] Setting up pubsub, subscribing to:', ANNOUNCE_TOPIC);
     pubsub.subscribe(ANNOUNCE_TOPIC);
+    console.log('[Relay] Subscribed to announce topic');
+    
     pubsub.addEventListener('message', (event: any) => {
       if (event.detail.topic === ANNOUNCE_TOPIC) {
-        // Just log announcements - relay doesn't need to act on them
-        console.log('[Relay] Peer announcement received');
+        console.log('[Relay] Peer announcement received from:', event.detail.from);
       }
     });
   }
