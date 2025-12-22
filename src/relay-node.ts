@@ -26,6 +26,7 @@ import type { RelayConfig } from './config.js';
 import { RateLimiter } from './rate-limiter.js';
 
 const ANNOUNCE_TOPIC = 'bytecave-announce';
+const BROADCAST_TOPIC = 'bytecave-broadcast';
 
 export class RelayNode {
   private node: Libp2p | null = null;
@@ -63,7 +64,7 @@ export class RelayNode {
       dcutr: dcutr(),
       pubsub: gossipsub({
         emitSelf: false,
-        allowPublishToZeroTopicPeers: false
+        allowPublishToZeroTopicPeers: true
       })
     };
 
@@ -208,9 +209,10 @@ export class RelayNode {
       return;
     }
 
-    console.log('[Relay] Setting up pubsub, subscribing to:', ANNOUNCE_TOPIC);
+    console.log('[Relay] Setting up pubsub, subscribing to topics:', ANNOUNCE_TOPIC, BROADCAST_TOPIC);
     pubsub.subscribe(ANNOUNCE_TOPIC);
-    console.log('[Relay] Subscribed to announce topic');
+    pubsub.subscribe(BROADCAST_TOPIC);
+    console.log('[Relay] Subscribed to announce and broadcast topics');
     
     pubsub.addEventListener('message', (event: any) => {
       if (event.detail.topic === ANNOUNCE_TOPIC) {

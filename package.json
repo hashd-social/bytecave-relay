@@ -18,6 +18,7 @@
     "@libp2p/bootstrap": "^11.0.8",
     "@libp2p/circuit-relay-v2": "^2.1.4",
     "@libp2p/dcutr": "^2.0.8",
+    "@libp2p/floodsub": "^11.0.10",
     "@libp2p/identify": "^3.0.8",
     "@libp2p/kad-dht": "^14.1.0",
     "@libp2p/tcp": "^10.0.10",
