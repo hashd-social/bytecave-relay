@@ -71,7 +71,9 @@ async function main() {
           relayedConnections: stats.relayedConnections,
           rejectedConnections: stats.rejectedConnections,
           rateLimit: stats.rateLimit,
-          version: '1.0.0'
+          version: '1.0.0',
+          isRelay: true,
+          nodeId: 'relay'
         };
         
         res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
