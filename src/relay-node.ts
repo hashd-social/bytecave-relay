@@ -221,6 +221,45 @@ export class RelayNode {
     });
   }
 
+  async setHttpMetadata(httpUrl: string): Promise<void> {
+    if (!this.node) return;
+
+    try {
+      const httpUrlBytes = new TextEncoder().encode(httpUrl);
+      await this.node.peerStore.merge(this.node.peerId, {
+        metadata: {
+          httpUrl: httpUrlBytes
+        }
+      });
+      console.log('[Relay] Set HTTP URL in peer metadata:', httpUrl);
+    } catch (error) {
+      console.error('[Relay] Failed to set HTTP metadata:', error);
+    }
+  }
+
+  announceHttpEndpoint(httpUrl: string): void {
+    if (!this.node) return;
+
+    const pubsub = this.node.services.pubsub as any;
+    if (!pubsub) {
+      console.log('[Relay] Cannot announce HTTP endpoint - pubsub not available');
+      return;
+    }
+
+    const announcement = {
+      peerId: this.node.peerId.toString(),
+      httpEndpoint: httpUrl,
+      contentTypes: 'all' as const,
+      nodeId: 'relay',
+      isRelay: true,
+      timestamp: Date.now()
+    };
+
+    const message = new TextEncoder().encode(JSON.stringify(announcement));
+    pubsub.publish(ANNOUNCE_TOPIC, message);
+    console.log('[Relay] Announced HTTP endpoint:', httpUrl);
+  }
+
   getStats(): {
     peerId: string;
     uptime: number;

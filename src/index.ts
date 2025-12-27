@@ -57,39 +57,51 @@ async function main() {
   try {
     await relay.start();
 
-    // Start HTTP info endpoint
-    const infoPort = parseInt(process.env.RELAY_INFO_PORT || '9090');
+    // Start HTTP health endpoint
+    const healthPort = parseInt(process.env.RELAY_HEALTH_PORT || '9090');
     const server = http.createServer((req, res) => {
-      if (req.url === '/info' || req.url === '/') {
+      if (req.url === '/health' || req.url === '/') {
         const stats = relay.getStats();
-        const info = {
-          peerId: stats.peerId,
-          addresses: stats.addresses,
-          announceAddresses: config.announceAddresses,
+        const health = {
+          status: 'healthy',
           uptime: stats.uptime,
-          connections: stats.connections,
-          relayedConnections: stats.relayedConnections,
-          rejectedConnections: stats.rejectedConnections,
-          rateLimit: stats.rateLimit,
-          version: '1.0.0',
+          nodeId: 'relay',
           isRelay: true,
-          nodeId: 'relay'
+          storedBlobs: 0,
+          totalSize: 0,
+          peers: stats.connections,
+          p2p: {
+            connected: stats.connections,
+            replicating: 0,
+            relay: stats.relayedConnections
+          },
+          peerId: stats.peerId,
+          metrics: {
+            requestsLastHour: 0,
+            avgResponseTime: 0,
+            successRate: 1
+          }
         };
-        
         res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-        res.end(JSON.stringify(info, null, 2));
-      } else if (req.url === '/health') {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'healthy', uptime: relay.getStats().uptime }));
+        res.end(JSON.stringify(health, null, 2));
       } else {
         res.writeHead(404, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Not found' }));
       }
     });
 
-    server.listen(infoPort, () => {
-      console.log(`[Info] HTTP endpoint listening on port ${infoPort}`);
-      console.log(`[Info] Access at http://localhost:${infoPort}/info`);
+    server.listen(healthPort, async () => {
+      console.log(`[Health] HTTP endpoint listening on port ${healthPort}`);
+      console.log(`[Health] Access at http://localhost:${healthPort}/health`);
+      
+      // Set HTTP URL in peer metadata for discovery
+      // Use localhost for local dev, or set RELAY_HTTP_URL for production (e.g., https://relay.hashd.social:9090)
+      const httpUrl = process.env.RELAY_HTTP_URL || `http://localhost:${healthPort}`;
+      await relay.setHttpMetadata(httpUrl);
+      
+      // Also announce via pubsub for backwards compatibility
+      relay.announceHttpEndpoint(httpUrl);
+      console.log(`[Health] HTTP URL for peer discovery: ${httpUrl}`);
     });
 
     // Print stats periodically

@@ -12,7 +12,7 @@ services:
     ports:
       - "4001:4001"
       - "4002:4002"
-      - "9095:9090"  # Metrics port (9095 external to avoid conflict)
+      - "9090:9090"  # Health endpoint port
     volumes:
       - relay1-data:/data
     environment:
@@ -22,7 +22,7 @@ services:
       - RELAY_ANNOUNCE_ADDRESSES=
       - RELAY_PRIVATE_KEY_PATH=/data/relay-key.json
       - RELAY_MAX_CONNECTIONS=1000
-      - RELAY_INFO_PORT=9090
+      - RELAY_HEALTH_PORT=9090
     networks:
       - bytecave-relay-net
     restart: unless-stopped
@@ -40,7 +40,7 @@ services:
     ports:
       - "4003:4001"
       - "4004:4002"
-      - "9091:9090"  # Metrics port
+      - "9091:9090"  # Health endpoint port
     volumes:
       - relay2-data:/data
     environment:
@@ -50,7 +50,7 @@ services:
       - RELAY_ANNOUNCE_ADDRESSES=
       - RELAY_PRIVATE_KEY_PATH=/data/relay-key.json
       - RELAY_MAX_CONNECTIONS=1000
-      - RELAY_INFO_PORT=9090
+      - RELAY_HEALTH_PORT=9090
       # Bootstrap from relay1 (will be populated after relay1 starts)
       # Note: You need to get relay1's peer ID first, then update this
       - RELAY_BOOTSTRAP_PEERS=
