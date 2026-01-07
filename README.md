@@ -5,6 +5,7 @@ A production-ready libp2p relay node that provides NAT traversal and peer discov
 ## Features
 
 - **Circuit Relay v2** - Enables connections between NAT'd peers
+- **Peer Directory Protocol** - Fast node discovery for browsers (1-2 seconds)
 - **DHT Server** - Distributed peer routing and discovery
 - **Gossipsub** - Peer announcement and messaging
 - **WebSocket Support** - Browser-compatible connections
@@ -145,10 +146,47 @@ Nodes communicate!
 ### Protocols Used
 
 - **Circuit Relay v2** - NAT traversal
+- **Peer Directory** (`/bytecave/relay/peers/1.0.0`) - Fast peer discovery
 - **Kad-DHT** - Distributed peer routing
 - **Gossipsub** - Peer announcements on `bytecave-announce` topic
 - **Identify** - Peer capability exchange
 - **DCUTR** - Direct connection upgrade
+
+### Peer Directory Protocol
+
+The relay implements a peer directory protocol that enables instant node discovery for browsers:
+
+**How it works:**
+1. Storage nodes connect to relay and announce themselves via gossip
+2. Relay tracks announced nodes in an in-memory directory
+3. Browsers query relay on startup: `/bytecave/relay/peers/1.0.0`
+4. Relay responds with list of storage nodes and their circuit relay addresses
+5. Browsers dial nodes directly through the relay
+
+**Benefits:**
+- **Fast discovery:** 1-2 seconds instead of 2+ minutes
+- **No configuration:** No hardcoded peer lists needed
+- **Auto-updating:** Relay maintains fresh peer list automatically
+- **Stale cleanup:** Nodes not seen for 5 minutes are removed
+
+**Protocol format:**
+```typescript
+// Request: Empty (just dial the protocol)
+
+// Response: JSON with length prefix
+{
+  "peers": [
+    {
+      "peerId": "12D3KooW...",
+      "multiaddrs": [
+        "/ip4/127.0.0.1/tcp/4002/ws/p2p/RELAY_ID/p2p-circuit/p2p/NODE_ID"
+      ],
+      "lastSeen": 1704636000000
+    }
+  ],
+  "timestamp": 1704636000000
+}
+```
 
 ## HTTP Info Endpoint
 
