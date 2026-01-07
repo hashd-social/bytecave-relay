@@ -12,19 +12,18 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@chainsafe/libp2p-gossipsub": "^14.1.0",
-    "@chainsafe/libp2p-noise": "^16.0.0",
-    "@chainsafe/libp2p-yamux": "^7.0.1",
-    "@libp2p/bootstrap": "^11.0.8",
-    "@libp2p/circuit-relay-v2": "^2.1.4",
-    "@libp2p/dcutr": "^2.0.8",
+    "@chainsafe/libp2p-noise": "^17.0.0",
+    "@chainsafe/libp2p-yamux": "^8.0.0",
+    "@libp2p/bootstrap": "^12.0.0",
+    "@libp2p/circuit-relay-v2": "^4.1.0",
+    "@libp2p/dcutr": "^3.0.9",
     "@libp2p/floodsub": "^11.0.10",
-    "@libp2p/identify": "^3.0.8",
-    "@libp2p/kad-dht": "^14.1.0",
-    "@libp2p/tcp": "^10.0.10",
-    "@libp2p/websockets": "^9.0.8",
-    "@multiformats/multiaddr": "^12.2.1",
-    "libp2p": "^2.2.1"
+    "@libp2p/identify": "^4.0.0",
+    "@libp2p/kad-dht": "^14.0.0",
+    "@libp2p/tcp": "^11.0.0",
+    "@libp2p/websockets": "^10.0.0",
+    "@multiformats/multiaddr": "^13.0.0",
+    "libp2p": "^3.1.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",

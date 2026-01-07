@@ -15,7 +15,7 @@ import { webSockets } from '@libp2p/websockets';
 import { noise } from '@chainsafe/libp2p-noise';
 import { yamux } from '@chainsafe/libp2p-yamux';
 import { kadDHT } from '@libp2p/kad-dht';
-import { gossipsub } from '@chainsafe/libp2p-gossipsub';
+import { floodsub } from '@libp2p/floodsub';
 import { identify } from '@libp2p/identify';
 import { bootstrap } from '@libp2p/bootstrap';
 import { circuitRelayServer } from '@libp2p/circuit-relay-v2';
@@ -27,6 +27,13 @@ import { RateLimiter } from './rate-limiter.js';
 
 const ANNOUNCE_TOPIC = 'bytecave-announce';
 const BROADCAST_TOPIC = 'bytecave-broadcast';
+const PROTOCOL_PEER_DIRECTORY = '/bytecave/relay/peers/1.0.0';
+
+interface StorageNodeInfo {
+  peerId: string;
+  multiaddrs: string[];
+  lastSeen: number;
+}
 
 export class RelayNode {
   private node: Libp2p | null = null;
@@ -36,6 +43,7 @@ export class RelayNode {
   private relayedConnections: number = 0;
   private rateLimiter: RateLimiter;
   private rejectedConnections: number = 0;
+  private storageNodes: Map<string, StorageNodeInfo> = new Map();
 
   constructor(config: RelayConfig) {
     this.config = config;
@@ -58,14 +66,12 @@ export class RelayNode {
         reservations: {
           maxReservations: this.config.maxConnections,
           defaultDurationLimit: 2 * 60 * 1000, // 2 minutes
-          defaultDataLimit: BigInt(1024 * 1024 * 10) // 10MB
+          defaultDataLimit: BigInt(1024 * 1024 * 10), // 10MB
+          applyDefaultLimit: true
         }
       }),
       dcutr: dcutr(),
-      pubsub: gossipsub({
-        emitSelf: false,
-        allowPublishToZeroTopicPeers: true
-      })
+      pubsub: floodsub()
     };
 
     // Only enable DHT if explicitly enabled (defaults to true for production)
@@ -110,6 +116,7 @@ export class RelayNode {
 
     this.setupEventListeners();
     await this.setupPubsub();
+    this.setupPeerDirectory();
 
     await this.node.start();
     this.startTime = Date.now();
@@ -121,6 +128,10 @@ export class RelayNode {
     console.log('[Relay] Peer ID:', peerId);
     console.log('[Relay] Listening on:');
     addrs.forEach(addr => console.log('  ', addr));
+    
+    // Log registered protocols for debugging
+    const protocols = await this.node.peerStore.get(this.node.peerId);
+    console.log('[Relay] Registered protocols:', protocols?.protocols || []);
 
     if (this.config.announceAddresses.length > 0) {
       console.log('[Relay] Announcing as:');
@@ -216,9 +227,88 @@ export class RelayNode {
     
     pubsub.addEventListener('message', (event: any) => {
       if (event.detail.topic === ANNOUNCE_TOPIC) {
-        console.log('[Relay] Peer announcement received from:', event.detail.from);
+        const from = event.detail.from.toString();
+        console.log('[Relay] Peer announcement received from:', from);
+        
+        // Track storage nodes from announcements
+        try {
+          const announcement = JSON.parse(new TextDecoder().decode(event.detail.data));
+          if (announcement.nodeId && !announcement.isRelay) {
+            // Get peer's multiaddrs via circuit relay
+            const relayMultiaddrs = this.node!.getMultiaddrs()
+              .filter(ma => ma.toString().includes('/ws'))
+              .map(ma => `${ma.toString()}/p2p-circuit/p2p/${from}`);
+            
+            this.storageNodes.set(from, {
+              peerId: from,
+              multiaddrs: relayMultiaddrs,
+              lastSeen: Date.now()
+            });
+            
+            console.log('[Relay] Tracked storage node:', announcement.nodeId, '(' + from.slice(0, 12) + '...)');
+          }
+        } catch (err) {
+          // Ignore parse errors
+        }
       }
     });
+    
+    // Cleanup stale nodes every minute
+    setInterval(() => {
+      const now = Date.now();
+      const staleThreshold = 5 * 60 * 1000; // 5 minutes
+      
+      for (const [peerId, info] of this.storageNodes.entries()) {
+        if (now - info.lastSeen > staleThreshold) {
+          this.storageNodes.delete(peerId);
+          console.log('[Relay] Removed stale storage node:', peerId.slice(0, 12) + '...');
+        }
+      }
+    }, 60000);
+  }
+
+  private setupPeerDirectory(): void {
+    if (!this.node) return;
+
+    console.log('[Relay] Setting up peer directory protocol:', PROTOCOL_PEER_DIRECTORY);
+
+    this.node.handle(PROTOCOL_PEER_DIRECTORY, async (stream: any) => {
+      try {
+        console.log('[Relay] Peer directory request received');
+        
+        // Build peer list with circuit relay addresses
+        const peers = Array.from(this.storageNodes.values()).map(node => ({
+          peerId: node.peerId,
+          multiaddrs: node.multiaddrs,
+          lastSeen: node.lastSeen
+        }));
+        
+        const response = {
+          peers,
+          timestamp: Date.now()
+        };
+        
+        const responseData = new TextEncoder().encode(JSON.stringify(response));
+        
+        // Send length prefix (4 bytes, big-endian)
+        const lengthPrefix = new Uint8Array(4);
+        new DataView(lengthPrefix.buffer).setUint32(0, responseData.length, false);
+        
+        // Combine and send
+        const combined = new Uint8Array(lengthPrefix.length + responseData.length);
+        combined.set(lengthPrefix, 0);
+        combined.set(responseData, lengthPrefix.length);
+        
+        stream.send(combined);
+        await stream.close();
+        
+        console.log('[Relay] Sent peer directory:', peers.length, 'peers');
+      } catch (error: any) {
+        console.error('[Relay] Peer directory error:', error.message);
+      }
+    });
+    
+    console.log('[Relay] Peer directory protocol registered');
   }
 
   async setHttpMetadata(httpUrl: string): Promise<void> {
