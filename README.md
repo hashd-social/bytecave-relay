@@ -7,7 +7,7 @@ A production-ready libp2p relay node that provides NAT traversal and peer discov
 - **Circuit Relay v2** - Enables connections between NAT'd peers
 - **Peer Directory Protocol** - Fast node discovery for browsers (1-2 seconds)
 - **DHT Server** - Distributed peer routing and discovery
-- **Gossipsub** - Peer announcement and messaging
+- **FloodSub** - Peer announcement and messaging
 - **WebSocket Support** - Browser-compatible connections
 - **Persistent Identity** - Stable peer ID across restarts
 - **Rate Limiting** - Protection against spam and abuse
@@ -148,7 +148,7 @@ Nodes communicate!
 - **Circuit Relay v2** - NAT traversal
 - **Peer Directory** (`/bytecave/relay/peers/1.0.0`) - Fast peer discovery
 - **Kad-DHT** - Distributed peer routing
-- **Gossipsub** - Peer announcements on `bytecave-announce` topic
+- **FloodSub** - Peer announcements on `bytecave-announce` topic
 - **Identify** - Peer capability exchange
 - **DCUTR** - Direct connection upgrade
 
