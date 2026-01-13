@@ -396,6 +396,14 @@ export class RelayNode {
     return this.node?.peerId.toString() || null;
   }
 
+  getStorageNodes(): Array<{peerId: string; multiaddrs: string[]; lastSeen: number}> {
+    return Array.from(this.storageNodes.values()).map(node => ({
+      peerId: node.peerId,
+      multiaddrs: node.multiaddrs,
+      lastSeen: node.lastSeen
+    }));
+  }
+
   getMultiaddrs(): string[] {
     return this.node?.getMultiaddrs().map(ma => ma.toString()) || [];
   }
