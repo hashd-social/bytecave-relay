@@ -27,8 +27,8 @@ docker-compose up -d relay1
 # View logs
 docker-compose logs -f relay1
 
-# Get relay multiaddr
-docker-compose logs relay1 | grep "Peer ID"
+# Get relay peer ID and multiaddrs
+docker-compose logs relay1 | grep "Listening on"
 ```
 
 ### Manual Installation
@@ -247,10 +247,13 @@ curl http://localhost:9090/health
 When configuring your storage node, use the relay's announce addresses:
 
 ```bash
-# Get the relay multiaddr
-curl http://relayer.hashd.social:9090/info | jq -r '.announceAddresses[0]'
+# Get the relay info
+curl http://relayer.hashd.social:9090/info
 
-# Use in your node config
+# Use WebSocket address for browsers
+REACT_APP_RELAY_PEERS=/dns4/relayer.hashd.social/tcp/4002/ws/p2p/PEER_ID
+
+# Use TCP address for storage nodes
 P2P_RELAY_PEERS=/dns4/relayer.hashd.social/tcp/4001/p2p/PEER_ID
 ```
 
