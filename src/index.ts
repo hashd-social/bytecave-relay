@@ -18,6 +18,7 @@
 
 import { RelayNode } from './relay-node.js';
 import { loadConfig } from './config.js';
+import { StorageWebSocketRelay } from './storage-websocket.js';
 import * as http from 'http';
 
 async function main() {
@@ -40,22 +41,31 @@ async function main() {
   console.log('');
 
   const relay = new RelayNode(config);
+  
+  // Start WebSocket storage relay
+  const wsPort = parseInt(process.env.RELAY_WS_PORT || '4003');
+  const wsRelay = new StorageWebSocketRelay(wsPort);
 
   // Graceful shutdown
   process.on('SIGINT', async () => {
     console.log('\n[Relay] Received SIGINT, shutting down...');
+    await wsRelay.stop();
     await relay.stop();
     process.exit(0);
   });
 
   process.on('SIGTERM', async () => {
     console.log('\n[Relay] Received SIGTERM, shutting down...');
+    await wsRelay.stop();
     await relay.stop();
     process.exit(0);
   });
 
   try {
     await relay.start();
+    
+    // Start WebSocket storage relay
+    await wsRelay.start();
 
     // Start HTTP health endpoint
     const healthPort = parseInt(process.env.RELAY_HEALTH_PORT || '9090');
