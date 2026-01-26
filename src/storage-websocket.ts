@@ -21,6 +21,7 @@ interface RegisterMessage {
   type: 'register';
   peerId: string;
   nodeId?: string;
+  isRegistered?: boolean;
 }
 
 interface StorageRequestMessage {
@@ -29,6 +30,7 @@ interface StorageRequestMessage {
   targetPeerId?: string; // Optional - relay will auto-select if not provided
   data: string; // base64 encoded blob
   contentType: string;
+  hashIdToken?: number;
   authorization?: {
     signature: string;
     address: string;
@@ -47,18 +49,35 @@ interface StorageResponseMessage {
   error?: string;
 }
 
+interface RetrieveRequestMessage {
+  type: 'retrieve-request';
+  requestId: string;
+  cid: string;
+  targetPeerId?: string;
+}
+
+interface RetrieveResponseMessage {
+  type: 'retrieve-response';
+  requestId: string;
+  success: boolean;
+  data?: string; // base64 encoded blob
+  mimeType?: string;
+  error?: string;
+}
+
 interface ErrorMessage {
   type: 'error';
   requestId?: string;
   error: string;
 }
 
-type Message = RegisterMessage | StorageRequestMessage | StorageResponseMessage | ErrorMessage;
+type Message = RegisterMessage | StorageRequestMessage | StorageResponseMessage | RetrieveRequestMessage | RetrieveResponseMessage | ErrorMessage;
 
 interface NodeConnection {
   ws: WebSocket;
   peerId: string;
   nodeId?: string;
+  isRegistered?: boolean;
   connectedAt: number;
 }
 
@@ -138,6 +157,12 @@ export class StorageWebSocketRelay {
       case 'storage-response':
         this.handleStorageResponse(ws, message);
         break;
+      case 'retrieve-request':
+        this.handleRetrieveRequest(ws, message);
+        break;
+      case 'retrieve-response':
+        this.handleRetrieveResponse(ws, message);
+        break;
       default:
         logger.warn('[Storage WS] Unknown message type:', (message as any).type);
         this.sendError(ws, 'Unknown message type');
@@ -145,7 +170,7 @@ export class StorageWebSocketRelay {
   }
 
   private handleRegister(ws: WebSocket, message: RegisterMessage): void {
-    const { peerId, nodeId } = message;
+    const { peerId, nodeId, isRegistered } = message;
 
     if (!peerId) {
       this.sendError(ws, 'Missing peerId in register message');
@@ -157,6 +182,7 @@ export class StorageWebSocketRelay {
       ws,
       peerId,
       nodeId,
+      isRegistered: isRegistered ?? false,
       connectedAt: Date.now()
     });
 
@@ -171,7 +197,7 @@ export class StorageWebSocketRelay {
   }
 
   private handleStorageRequest(ws: WebSocket, message: StorageRequestMessage): void {
-    const { requestId, data, contentType, authorization } = message;
+    const { requestId, data, contentType, hashIdToken, authorization } = message;
     let { targetPeerId } = message;
 
     if (!requestId || !data) {
@@ -181,14 +207,17 @@ export class StorageWebSocketRelay {
 
     // Auto-select a storage node if targetPeerId not provided
     if (!targetPeerId) {
-      const availableNodes = Array.from(this.nodeConnections.values());
+      // Filter to only registered nodes
+      const availableNodes = Array.from(this.nodeConnections.values())
+        .filter(node => node.isRegistered === true);
+      
       if (availableNodes.length === 0) {
-        this.sendError(ws, 'No storage nodes available', requestId);
+        this.sendError(ws, 'No registered storage nodes available', requestId);
         return;
       }
-      // Select first available node (could be improved with load balancing)
+      // Select first available registered node (could be improved with load balancing)
       targetPeerId = availableNodes[0].peerId;
-      logger.info('[Storage WS] Auto-selected storage node:', targetPeerId.slice(0, 12));
+      logger.info('[Storage WS] Auto-selected registered storage node:', targetPeerId.slice(0, 12));
     }
 
     // Find target node connection
@@ -212,6 +241,7 @@ export class StorageWebSocketRelay {
         requestId,
         data,
         contentType,
+        hashIdToken,
         authorization
       }));
 
@@ -254,6 +284,98 @@ export class StorageWebSocketRelay {
       });
     } catch (error: any) {
       logger.error('[Storage WS] Failed to forward response:', error.message);
+    }
+
+    // Cleanup
+    this.pendingRequests.delete(requestId);
+  }
+
+  private handleRetrieveRequest(ws: WebSocket, message: RetrieveRequestMessage): void {
+    const { requestId, cid } = message;
+    let { targetPeerId } = message;
+
+    if (!requestId || !cid) {
+      this.sendError(ws, 'Missing required fields in retrieve request', requestId);
+      return;
+    }
+
+    // Auto-select a storage node if targetPeerId not provided
+    if (!targetPeerId) {
+      // Filter to only registered nodes
+      const availableNodes = Array.from(this.nodeConnections.values())
+        .filter(node => node.isRegistered === true);
+      
+      if (availableNodes.length === 0) {
+        this.sendError(ws, 'No registered storage nodes available', requestId);
+        return;
+      }
+      // Select first available registered node
+      targetPeerId = availableNodes[0].peerId;
+      logger.info('[Storage WS] Auto-selected registered storage node for retrieval:', targetPeerId.slice(0, 12));
+    }
+
+    // Find target node connection
+    const nodeConn = this.nodeConnections.get(targetPeerId);
+    if (!nodeConn) {
+      this.sendError(ws, `Storage node ${targetPeerId.slice(0, 12)} not connected`, requestId);
+      return;
+    }
+
+    // Store pending request
+    this.pendingRequests.set(requestId, {
+      browserWs: ws,
+      requestId,
+      timestamp: Date.now()
+    });
+
+    // Forward request to storage node
+    try {
+      nodeConn.ws.send(JSON.stringify({
+        type: 'retrieve-request',
+        requestId,
+        cid
+      }));
+
+      logger.info('[Storage WS] Forwarded retrieve request:', {
+        requestId,
+        targetPeerId: targetPeerId.slice(0, 12),
+        cid: cid.slice(0, 16)
+      });
+    } catch (error: any) {
+      logger.error('[Storage WS] Failed to forward retrieve request:', error.message);
+      this.sendError(ws, 'Failed to forward request to storage node', requestId);
+      this.pendingRequests.delete(requestId);
+    }
+  }
+
+  private handleRetrieveResponse(ws: WebSocket, message: RetrieveResponseMessage): void {
+    const { requestId, success, data, mimeType, error } = message;
+
+    // Find pending request
+    const pending = this.pendingRequests.get(requestId);
+    if (!pending) {
+      logger.warn('[Storage WS] Received retrieve response for unknown request:', requestId);
+      return;
+    }
+
+    // Forward response to browser
+    try {
+      pending.browserWs.send(JSON.stringify({
+        type: 'retrieve-response',
+        requestId,
+        success,
+        data,
+        mimeType,
+        error
+      }));
+
+      logger.info('[Storage WS] Forwarded retrieve response:', {
+        requestId,
+        success,
+        dataSize: data?.length
+      });
+    } catch (error: any) {
+      logger.error('[Storage WS] Failed to forward retrieve response:', error.message);
     }
 
     // Cleanup
