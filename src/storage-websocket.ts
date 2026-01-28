@@ -110,7 +110,9 @@ export class StorageWebSocketRelay {
 
       ws.on('message', (data: Buffer) => {
         try {
+          logger.info('[Storage WS] Received message, size:', data.length, 'bytes');
           const message = JSON.parse(data.toString()) as Message;
+          logger.info('[Storage WS] Parsed message type:', message.type);
           this.handleMessage(ws, message);
         } catch (error: any) {
           logger.error('[Storage WS] Failed to parse message:', error.message);
