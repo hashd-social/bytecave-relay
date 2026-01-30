@@ -174,21 +174,30 @@ export class StorageWebSocketRelay {
   private handleRegister(ws: WebSocket, message: RegisterMessage): void {
     const { peerId, nodeId, isRegistered } = message;
 
+    logger.info('[Storage WS] Registration request:', { peerId: peerId?.slice(0, 12), nodeId, isRegistered, type: typeof isRegistered });
+
     if (!peerId) {
       this.sendError(ws, 'Missing peerId in register message');
       return;
     }
 
     // Store node connection
+    const registeredStatus = isRegistered ?? false;
     this.nodeConnections.set(peerId, {
       ws,
       peerId,
       nodeId,
-      isRegistered: isRegistered ?? false,
+      isRegistered: registeredStatus,
       connectedAt: Date.now()
     });
 
-    logger.info('[Storage WS] Node registered:', { peerId, nodeId, totalNodes: this.nodeConnections.size });
+    logger.info('[Storage WS] Node registered:', { 
+      peerId: peerId.slice(0, 12), 
+      nodeId, 
+      isRegistered: registeredStatus,
+      totalNodes: this.nodeConnections.size,
+      registeredNodes: Array.from(this.nodeConnections.values()).filter(n => n.isRegistered === true).length
+    });
 
     // Send confirmation
     ws.send(JSON.stringify({
@@ -202,18 +211,29 @@ export class StorageWebSocketRelay {
     const { requestId, data, contentType, hashIdToken, authorization } = message;
     let { targetPeerId } = message;
 
+    logger.info('[Storage WS] Processing storage request:', { requestId, hasData: !!data, targetPeerId });
+
     if (!requestId || !data) {
+      logger.error('[Storage WS] Missing required fields:', { requestId: !!requestId, data: !!data });
       this.sendError(ws, 'Missing required fields in storage request', requestId);
       return;
     }
 
     // Auto-select a storage node if targetPeerId not provided
     if (!targetPeerId) {
+      logger.info('[Storage WS] No targetPeerId, auto-selecting from', this.nodeConnections.size, 'total connections');
+      
       // Filter to only registered nodes
       const availableNodes = Array.from(this.nodeConnections.values())
         .filter(node => node.isRegistered === true);
       
+      logger.info('[Storage WS] Found', availableNodes.length, 'registered nodes');
+      availableNodes.forEach(node => {
+        logger.info('[Storage WS] - Node:', node.peerId.slice(0, 12), 'registered:', node.isRegistered);
+      });
+      
       if (availableNodes.length === 0) {
+        logger.error('[Storage WS] No registered storage nodes available');
         this.sendError(ws, 'No registered storage nodes available', requestId);
         return;
       }

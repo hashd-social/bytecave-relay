@@ -33,6 +33,9 @@ interface StorageNodeInfo {
   peerId: string;
   multiaddrs: string[];
   lastSeen: number;
+  isRegistered: boolean;
+  onChainNodeId?: string;
+  nodeId?: string;
 }
 
 export class RelayNode {
@@ -242,10 +245,15 @@ export class RelayNode {
             this.storageNodes.set(from, {
               peerId: from,
               multiaddrs: relayMultiaddrs,
-              lastSeen: Date.now()
+              lastSeen: Date.now(),
+              isRegistered: announcement.isRegistered || false,
+              onChainNodeId: announcement.onChainNodeId,
+              nodeId: announcement.nodeId
             });
             
-            console.log('[Relay] Tracked storage node:', announcement.nodeId, '(' + from.slice(0, 12) + '...)');
+            console.log('[Relay] Tracked storage node:', announcement.nodeId, '(' + from.slice(0, 12) + '...)', 
+              'isRegistered:', announcement.isRegistered || false,
+              'onChainNodeId:', announcement.onChainNodeId || 'none');
           }
         } catch (err) {
           // Ignore parse errors
@@ -276,11 +284,17 @@ export class RelayNode {
       try {
         console.log('[Relay] Peer directory request received');
         
-        // Build peer list with circuit relay addresses
-        const peers = Array.from(this.storageNodes.values()).map(node => ({
+        // Build peer list with circuit relay addresses - filter to registered nodes only
+        const allNodes = Array.from(this.storageNodes.values());
+        const registeredNodes = allNodes.filter(node => node.isRegistered);
+        
+        const peers = registeredNodes.map(node => ({
           peerId: node.peerId,
           multiaddrs: node.multiaddrs,
-          lastSeen: node.lastSeen
+          lastSeen: node.lastSeen,
+          isRegistered: node.isRegistered,
+          onChainNodeId: node.onChainNodeId,
+          nodeId: node.nodeId
         }));
         
         const response = {
@@ -302,7 +316,7 @@ export class RelayNode {
         stream.send(combined);
         await stream.close();
         
-        console.log('[Relay] Sent peer directory:', peers.length, 'peers');
+        console.log('[Relay] Sent peer directory:', peers.length, 'registered peers out of', allNodes.length, 'total');
       } catch (error: any) {
         console.error('[Relay] Peer directory error:', error.message);
       }
