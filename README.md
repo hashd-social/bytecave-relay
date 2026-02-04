@@ -1,6 +1,10 @@
 # ByteCave Relay Node
 
-A production-ready libp2p relay node that provides NAT traversal and peer discovery for the ByteCave decentralized storage network.
+ByteCave Relay is a network component that enables peer discovery and connectivity in the ByteCave storage network. Its primary role is to help clients and nodes find each other and establish peer-to-peer connections, especially in cases where direct connections aren’t possible due to NATs or browser limitations.
+
+The relay does not store plaintext data, hold encryption keys, or have any special authority over content. All data passing through the relay is already encrypted client-side. In most cases, the relay is used only during connection setup; once peers can connect directly, traffic can move peer-to-peer without continuing to pass through it.
+
+ByteCave Relays are intentionally simple and replaceable. Anyone can run one, clients can use multiple relays for redundancy, and the network does not rely on a single relay or operator. Relays exist to improve reliability and reachability, not to act as trusted infrastructure.
 
 ## Features
 
