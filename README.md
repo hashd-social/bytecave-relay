@@ -17,8 +17,8 @@ ByteCave Relays are intentionally simple and replaceable. Anyone can run one, cl
 - **Rate Limiting** - Protection against spam and abuse
 - **Connection Throttling** - Per-peer and per-IP limits
 - **Abuse Prevention** - Automatic blocking for violations
-- **HTTP Info Endpoint** - Relay information and stats
-- **Health Monitoring** - Built-in metrics and health checks
+- **HTTP Health Endpoint** - Health checks and relay stats
+- **WebSocket Storage Relay** - Routes storage requests between browsers and nodes
 
 ## Quick Start
 
@@ -58,7 +58,9 @@ Configure via environment variables:
 | `RELAY_ANNOUNCE_ADDRESSES` | (empty) | Public addresses to announce |
 | `RELAY_PRIVATE_KEY_PATH` | `/data/relay-key.json` | Path to identity file |
 | `RELAY_MAX_CONNECTIONS` | `1000` | Maximum peer connections |
-| `RELAY_INFO_PORT` | `9090` | HTTP info endpoint port |
+| `RELAY_HEALTH_PORT` | `9090` | HTTP health endpoint port |
+| `RELAY_WS_PORT` | `4003` | WebSocket storage relay port |
+| `RELAY_HTTP_URL` | `http://localhost:9090` | Public HTTP URL for peer discovery |
 | `RELAY_BOOTSTRAP_PEERS` | (empty) | Bootstrap peer multiaddrs |
 
 ### Example Configuration
@@ -116,10 +118,13 @@ Open these ports:
 # TCP for storage nodes
 sudo ufw allow 4001/tcp
 
-# WebSocket for browsers
+# WebSocket for browsers (libp2p)
 sudo ufw allow 4002/tcp
 
-# Metrics (optional, restrict to monitoring IPs)
+# WebSocket for storage relay
+sudo ufw allow 4003/tcp
+
+# Health endpoint (optional, restrict to monitoring IPs)
 sudo ufw allow from MONITORING_IP to any port 9090
 ```
 
@@ -192,73 +197,77 @@ The relay implements a peer directory protocol that enables instant node discove
 }
 ```
 
-## HTTP Info Endpoint
+## HTTP Endpoints
 
-The relay exposes an HTTP endpoint for node operators to discover relay information:
-
-### Get Relay Info
-
-```bash
-# Get relay peer ID and addresses
-curl http://relayer.hashd.social:9090/info
-
-# Or for local testing
-curl http://localhost:9090/info
-```
-
-**Response:**
-```json
-{
-  "peerId": "12D3KooW...",
-  "addresses": [
-    "/ip4/0.0.0.0/tcp/4001/p2p/12D3KooW...",
-    "/ip4/0.0.0.0/tcp/4002/ws/p2p/12D3KooW..."
-  ],
-  "announceAddresses": [
-    "/dns4/relayer.hashd.social/tcp/4001",
-    "/dns4/relayer.hashd.social/tcp/4002/ws"
-  ],
-  "uptime": 7200,
-  "connections": 45,
-  "relayedConnections": 123,
-  "rejectedConnections": 3,
-  "rateLimit": {
-    "totalPeers": 67,
-    "blockedPeers": 2,
-    "blockedIPs": 1,
-    "activeConnections": 45
-  },
-  "version": "1.0.0"
-}
-```
+The relay exposes HTTP endpoints for health monitoring and peer discovery:
 
 ### Health Check
 
 ```bash
+# Get relay health and stats
 curl http://localhost:9090/health
+
+# Or for production
+curl http://relayer.hashd.social:9090/health
 ```
 
 **Response:**
 ```json
 {
   "status": "healthy",
-  "uptime": 7200
+  "uptime": 7200,
+  "nodeId": "relay",
+  "isRelay": true,
+  "storedBlobs": 0,
+  "totalSize": 0,
+  "peers": 45,
+  "p2p": {
+    "connected": 45,
+    "replicating": 0,
+    "relay": 123
+  },
+  "peerId": "12D3KooW...",
+  "metrics": {
+    "requestsLastHour": 0,
+    "avgResponseTime": 0,
+    "successRate": 1
+  }
 }
+```
+
+### Get Storage Nodes
+
+```bash
+# Get list of connected storage nodes
+curl http://localhost:9090/peers
+```
+
+**Response:**
+```json
+[
+  {
+    "peerId": "12D3KooW...",
+    "multiaddrs": [
+      "/ip4/127.0.0.1/tcp/4002/ws/p2p/RELAY_ID/p2p-circuit/p2p/NODE_ID"
+    ],
+    "lastSeen": 1704636000000
+  }
+]
 ```
 
 ### For Node Operators
 
-When configuring your storage node, use the relay's announce addresses:
+When configuring your storage node or browser client, use the relay's multiaddrs:
 
 ```bash
-# Get the relay info
-curl http://relayer.hashd.social:9090/info
-
-# Use WebSocket address for browsers
+# For browser clients (use WebSocket)
 REACT_APP_RELAY_PEERS=/dns4/relayer.hashd.social/tcp/4002/ws/p2p/PEER_ID
 
-# Use TCP address for storage nodes
+# For storage nodes (use TCP)
 P2P_RELAY_PEERS=/dns4/relayer.hashd.social/tcp/4001/p2p/PEER_ID
+
+# Get peer ID from logs or health endpoint
+curl http://relayer.hashd.social:9090/health | grep peerId
 ```
 
 ## Monitoring
@@ -353,7 +362,7 @@ See `PRODUCTION_READY.md` for detailed configuration.
 
 - Docker and Docker Compose
 - Public IP or domain (for production)
-- Ports 4001, 4002 accessible from internet
+- Ports 4001, 4002, 4003 accessible from internet
 - Node.js 22+ (for manual installation)
 
 ## License
